@@ -10,8 +10,8 @@
               <input type="hidden" name="amount" t-att-value="amount"/>
               <input type="hidden" name="currency" t-att-value="currency"/>
               <input type="hidden" name="body" t-att-value="body"/>
-              <input t-if="handling" type="hidden" name="handling"
-                  t-att-value="handling"/>
+              <input t-if="fees" type="hidden" name="fees"
+                  t-att-value="fees"/>
               <!-- partner / address data -->
               <input type="hidden" name="payer_email" t-att-value="payer_email"/>
               <input t-if="bank_id" type="hidden" name="bank_id" t-att-value="bank_id"/>

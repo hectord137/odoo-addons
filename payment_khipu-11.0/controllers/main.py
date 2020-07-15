@@ -10,7 +10,7 @@ from werkzeug import urls
 from odoo import http
 from odoo.addons.payment.models.payment_acquirer import ValidationError
 from odoo.http import request
-
+import logging
 _logger = logging.getLogger(__name__)
 
 try:
@@ -27,21 +27,22 @@ class KhipuController(http.Controller):
     _cancel_url = '/payment/khipu/test/cancel'
 
     @http.route([
-        '/payment/khipu/notify/<int:acquirer_id>',
         '/payment/khipu/test/notify',
-    ], type='http', auth='none', methods=['POST'], csrf=False)
+        '/payment/khipu/notify/<model("payment.acquirer"):acquirer_id>',
+    ], type='http', auth='public', methods=['POST'], csrf=False)
     def khipu_validate_data(self,acquirer_id=None, **post):
-        acquirer = request.env['payment.acquirer'].browse(acquirer_id)
-        tx_data = acquirer.khipu_getTransaction( post)
+        _logger.warning("post %s, acquirer_id %s" %(post, acquirer_id))
+        tx_data = acquirer_id.khipu_getTransaction( post)
         res = request.env['payment.transaction'].sudo().form_feedback(tx_data, 'khipu')
-        return  ''
-        return Response(status=200)
+        if not res:
+            raise ValidationError("Transacción no esperada")
+        return ''
 
     @http.route([
-        '/payment/khipu/return/<model("payment.transaction"):payment_tx>',
+        '/payment/khipu/return',
         '/payment/khipu/test/return',
     ], type='http', auth='public', csrf=False, website=True)
-    def khipu_form_feedback(self, payment_tx=None, **post):
+    def khipu_form_feedback(self, **post):
         return werkzeug.utils.redirect('/shop/confirmation')
 
     @http.route([
@@ -51,11 +52,12 @@ class KhipuController(http.Controller):
     def final(self, **post):
         return werkzeug.utils.redirect('/shop/confirmation')
 
-    @http.route(['/payment/khipu/redirect'],  type='http', auth='public', methods=["POST"], csrf=False, website=True)
+    @http.route(['/payment/khipu/redirect'],
+        type='http', auth='public', methods=["POST"], csrf=False, website=True)
     def redirect_khipu(self, **post):
         acquirer_id = int(post.get('acquirer_id'))
         acquirer = request.env['payment.acquirer'].browse(acquirer_id)
-        result =  acquirer.khipu_initTransaction(post)
+        result =  acquirer.sudo().khipu_initTransaction(post)
         return werkzeug.utils.redirect(result.payment_url)
         #@TODO render error
         #values={

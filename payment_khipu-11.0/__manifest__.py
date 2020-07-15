@@ -2,16 +2,19 @@
 
 {
     'name': 'Khipu Payment Acquirer',
-    'category': 'Accounting',
+    'category': 'Payment / Chile',
     'author': 'Daniel Santibáñez Polanco',
-    'summary': 'Payment Acquirer: Khipu Implementation',
+    'summary': 'Payment Acquirer: Chilean Khipu Acquirer',
     'website': 'https://globalresponse.cl',
-    'version': "1.0.0",
-    'description': """Khipu Payment Acquirer""",
-    'depends': ['payment'],
+    'version': "1.6.0",
+    'description': """Chilean Khipu Payment Acquirer""",
+    'depends': [
+            'payment',
+            'payment_currency',
+    ],
     'external_dependencies': {
-            'python':[
-                #'khipu',
+            'python': [
+                'pykhipu',
                 'urllib3',
             ],
     },
