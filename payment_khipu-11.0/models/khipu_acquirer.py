@@ -2,20 +2,20 @@
 
 import time
 from datetime import datetime, timedelta
+import logging
 from odoo import SUPERUSER_ID
 from odoo import api, models, fields
 from odoo.tools import float_round, DEFAULT_SERVER_DATE_FORMAT
 from odoo.tools.float_utils import float_compare, float_repr
 from odoo.tools.safe_eval import safe_eval
 from odoo.tools.translate import _
-from odoo.addons.payment.models.payment_acquirer import ValidationError
-import logging
+
 _logger = logging.getLogger(__name__)
 
 try:
-    from pykhipu.client import Client
-except Exception as e:
-    _logger.warning("No se puede cargar Khipu %s" % str(e))
+    from .pykhipu.client import Client
+except:
+    _logger.warning("No se puede cargar Khipu")
 
 
 class PaymentAcquirerKhipu(models.Model):
@@ -31,34 +31,10 @@ class PaymentAcquirerKhipu(models.Model):
             string="LLave",
         )
 
-    @api.multi
     def _get_feature_support(self):
         res = super(PaymentAcquirerKhipu, self)._get_feature_support()
         res['fees'].append('khipu')
         return res
-
-    @api.multi
-    def khipu_compute_fees(self, amount, currency_id, country_id):
-        """ Compute Khipu fees.
-
-            :param float amount: the amount to pay
-            :param integer country_id: an ID of a res.country, or None. This is
-                                       the customer's country, to be compared to
-                                       the acquirer company country.
-            :return float fees: computed fees
-        """
-        if not self.fees_active:
-            return 0.0
-        country = self.env['res.country'].browse(country_id)
-        if country and self.company_id.country_id.id == country.id:
-            percentage = self.fees_dom_var
-            fixed = self.fees_dom_fixed
-        else:
-            percentage = self.fees_int_var
-            fixed = self.fees_int_fixed
-        factor = (percentage / 100.0) + (0.19 * (percentage /100.0))
-        fees = ((amount + fixed) / (1 - factor))
-        return (fees - amount)
 
     @api.model
     def _get_khipu_urls(self, environment):
@@ -72,7 +48,6 @@ class PaymentAcquirerKhipu(models.Model):
                 'khipu_form_url': base_url +'/payment/khipu/redirect',
             }
 
-    @api.multi
     def khipu_form_generate_values(self, values):
         #banks = self.khipu_get_banks()#@TODO mostrar listados de bancos
         #_logger.warning("banks %s" %banks)
@@ -94,11 +69,9 @@ class PaymentAcquirerKhipu(models.Model):
             'return_url': base_url + '/payment/khipu/return',
             'cancel_url': base_url + '/payment/khipu/cancel',
             'picture_url': base_url + '/web/image/res.company/%s/logo' % values.get('company_id', self.env.user.company_id.id),
-            'fees': values.get('fees', 0),
         })
         return values
 
-    @api.multi
     def khipu_get_form_action_url(self):
         return self._get_khipu_urls(self.environment)['khipu_form_url']
 
@@ -116,21 +89,11 @@ class PaymentAcquirerKhipu(models.Model):
         tx = self.env['payment.transaction'].search([('reference','=', post.get('transaction_id'))])
         del(post['acquirer_id'])
         del(post['expires_date']) #Fix Formato que solicita Khipu
+        post['return_url'] += '/%s' % str(tx.id)
         post['notify_url'] += '/%s' % str(self.id)
         post['cancel_url'] += '/%s' % str(self.id)
-        amount = (float(post['amount']) + float(post.get('fees', 0.0)))
-        currency = self.env['res.currency'].search([
-            ('name', '=', post.get('currency', 'CLP')),
-        ])
-        if self.force_currency and currency != self.force_currency_id:
-            amount = lambda price: currency.compute(
-                                amount,
-                                self.force_currency_id)
-            currency = self.force_currency_id
-        post['currency'] = currency.name
-        post['amount'] = currency.round(amount)
         client = self.khipu_get_client()
-        res = client.payments.post(**post)
+        res = client.payments.post(post)
         if hasattr(res, 'payment_url'):
             tx.write({'state': 'pending'})
         return res
@@ -143,28 +106,6 @@ class PaymentAcquirerKhipu(models.Model):
 class PaymentTxKhipu(models.Model):
     _inherit = 'payment.transaction'
 
-    @api.multi
-    def _khipu_form_get_invalid_parameters(self, data):
-        invalid_parameters = []
-
-        if data.subject != '%s: %s' % (self.acquirer_id.company_id.name, self.reference):
-            invalid_parameters.append(('reference', data.subject, '%s: %s' % (self.acquirer_id.company_id.name, self.reference)))
-        if data.transaction_id != self.reference:
-            invalid_parameters.append(('reference', data.transaction_id, self.reference))
-        # check what is buyed
-        amount = (self.amount + self.acquirer_id.compute_fees(self.amount, self.currency_id.id, self.partner_country_id.id))
-        currency = self.currency_id
-        if self.acquirer_id.force_currency and currency != self.acquirer_id.force_currency_id:
-            amount = lambda price: currency.compute(
-                                amount,
-                                self.acquirer_id.force_currency_id)
-            currency = self.acquirer_id.force_currency_id
-        amount = currency.round(amount)
-        if float(data.amount) != amount:
-            invalid_parameters.append(('amount', data.amount, amount))
-
-        return invalid_parameters
-
     @api.model
     def _khipu_form_get_tx_from_data(self, data):
         reference, txn_id = data.transaction_id, data.payment_id
@@ -174,10 +115,7 @@ class PaymentTxKhipu(models.Model):
             raise ValidationError(error_msg)
 
         # find tx -> @TDENOTE use txn_id ?
-        txs = self.env['payment.transaction'].search([
-            ('reference', '=', reference),
-            ('acquirer_id.provider', '=', 'khipu'),
-        ])
+        txs = self.env['payment.transaction'].search([('reference', '=', reference)])
         if not txs or len(txs) > 1:
             error_msg = 'Khipu: received data for reference %s' % (reference)
             if not txs:
@@ -188,7 +126,6 @@ class PaymentTxKhipu(models.Model):
             raise ValidationError(error_msg)
         return txs[0]
 
-    @api.multi
     def _khipu_form_validate(self, data):
         codes = {
                 '0' : 'Transacción aprobada.',
