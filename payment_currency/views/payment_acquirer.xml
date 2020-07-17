@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <record id="acquirer_form" model="ir.ui.view">
+            <field name="name">acquirer.form.</field>
+            <field name="model">payment.acquirer</field>
+            <field name="inherit_id" ref="payment.acquirer_form"/>
+            <field name="arch" type="xml">
+                <field name="country_ids" position="before">
+                    <field name="currency_ids" widget="many2many_tags"/>
+                    <field name="force_currency" />
+                    <field name="force_currency_id" attrs="{'invisible': [('force_currency', '=', False)]}" />
+                </field>
+            </field>
+        </record>
+
+
+    </data>
+</odoo>
