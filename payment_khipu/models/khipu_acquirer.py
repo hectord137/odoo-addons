@@ -203,7 +203,7 @@ class PaymentTxKhipu(models.Model):
         }
         if status in ['done']:
             _logger.info('Validated khipu payment for tx %s: set as done' % (self.reference))
-            res.update(state='done', date_validate=datetime.now())
+            res.update(state='done', date=datetime.now())
             return self.write(res)
         elif status in ['-6', '-7']:
             _logger.warning('Received notification for khipu payment %s: set as pending' % (self.reference))
