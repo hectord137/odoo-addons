@@ -64,3 +64,11 @@ class KhipuController(http.Controller):
         #    'khipu_redirect': resp,
         #}
         return request.render('payment_khipu.khipu_redirect', values)
+    
+    @http.route([
+        '/payment/khipu/cancel/<model("payment.acquirer"):acquirer_id>',
+        '/payment/khipu/test/cancel',
+    ], type='http', auth='public', csrf=False, website=True)
+    def khipu_cancel(self, **post):
+        return werkzeug.utils.redirect('/shop/payment')
+
